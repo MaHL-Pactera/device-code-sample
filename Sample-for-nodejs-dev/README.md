@@ -1,6 +1,11 @@
 # Windows Azure Active Directory Authentication Library (ADAL) for Node.js
 The ADAL for node.js library makes it easy for node.js applications to authenticate to AAD in order to access AAD protected web resources.  It supports 3 authentication modes shown in the quickstart code below.
 
+# Note --2020/4/07 By Mahl
+Authentication's "Advanced settings" should be set "Yes" for using Device code flow.
+Please refer to the following path.
+Home>App registrations>Owned applications(eg.mahlspeechBotTest001) | Authentication
+
 ## Versions
 Current version - 0.1.28  
 Minimum recommended version - 0.1.22  
