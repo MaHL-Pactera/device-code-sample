@@ -24,19 +24,9 @@ var express = require('express');
 var logger = require('connect-logger');
 var cookieParser = require('cookie-parser');
 var session = require('cookie-session');
-var fs = require('fs');
 var crypto = require('crypto');
-
+//var graph = require('./graph.js');
 var AuthenticationContext = require('adal-node').AuthenticationContext;
-
-var app = express();
-app.use(logger());
-app.use(cookieParser('a deep secret'));
-app.use(session({secret: '1234567890QWERTY'}));
-
-app.get('/', function(req, res) {
-  res.redirect('login');
-});
 
 /*
  * You can override the default account information by providing a JSON file
@@ -50,40 +40,30 @@ app.get('/', function(req, res) {
  *   "clientSecret" : "verySecret="
  * }
  */
-var parametersFile = process.argv[2] || process.env['ADAL_SAMPLE_PARAMETERS_FILE'];
-
 var sampleParameters;
-if (parametersFile) {
-  var jsonFile = fs.readFileSync(parametersFile);
-  if (jsonFile) {
-    sampleParameters = JSON.parse(jsonFile);
-  } else {
-    console.log('File not found, falling back to defaults: ' + parametersFile);
-  }
-}
-
-if (!parametersFile) {
-  sampleParameters = {
-    tenant : 'rrandallaad1.onmicrosoft.com',
-    authorityHostUrl : 'https://login.windows.net',
-    clientId : '624ac9bd-4c1c-4686-aec8-b56a8991cfb3',
-    username : 'frizzo@naturalcauses.com',
-    password : ''
-  };
-}
-
+sampleParameters = {
+  tenant: '', // tenant ID in Microsoft Azure. How to get the information,You can refer to the file(AFS-12構築手順_200324.xlsx)
+  authorityHostUrl: 'https://login.microsoftonline.com/common',
+  clientId: '',//APP ID in Microsoft Azure. How to get the information,You can refer to the file(AFS-12構築手順_200324.xlsx)
+  clientSecret: ''//Client Secret Password. How to get the information,You can refer to the file(AFS-12構築手順_200324.xlsx)
+};
 var authorityUrl = sampleParameters.authorityHostUrl + '/' + sampleParameters.tenant;
-var redirectUri = 'http://localhost:3000/getAToken';
 var resource = '00000002-0000-0000-c000-000000000000';
+var authenticationContext = new AuthenticationContext(authorityUrl);
+var app = express();
+app.use(logger());
+app.use(cookieParser('a deep secret'));
+app.use(session({ secret: '' }));//Client Secret Password. How to get the information,You can refer to the file(AFS-12構築手順_200324.xlsx)
 
-var templateAuthzUrl = 'https://login.windows.net/' + sampleParameters.tenant + '/oauth2/authorize?response_type=code&client_id=<client_id>&redirect_uri=<redirect_uri>&state=<state>&resource=<resource>';
+app.get('/', function (req, res) {
+  res.redirect('login');
+});
 
-
-app.get('/', function(req, res) {
+app.get('/', function (req, res) {
   res.redirect('/login');
 });
 
-app.get('/login', function(req, res) {
+app.get('/login', function (req, res) {
   console.log(req.cookies);
 
   res.cookie('acookie', 'this is a cookie');
@@ -98,57 +78,69 @@ app.get('/login', function(req, res) {
     ');
 });
 
-function createAuthorizationUrl(state) {
-  var authorizationUrl = templateAuthzUrl.replace('<client_id>', sampleParameters.clientId);
-  authorizationUrl = authorizationUrl.replace('<redirect_uri>',redirectUri);
-  authorizationUrl = authorizationUrl.replace('<state>', state);
-  authorizationUrl = authorizationUrl.replace('<resource>', resource);
-  return authorizationUrl;
-}
-
 // Clients get redirected here in order to create an OAuth authorize url and redirect them to AAD.
 // There they will authenticate and give their consent to allow this app access to
 // some resource they own.
-app.get('/auth', function(req, res) {
-  crypto.randomBytes(48, function(ex, buf) {
-    var token = buf.toString('base64').replace(/\//g,'_').replace(/\+/g,'-');
+app.get('/auth', function (req, res) {
+  crypto.randomBytes(48, function (ex, buf) {
+    var token = buf.toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
 
     res.cookie('authstate', token);
-    var authorizationUrl = createAuthorizationUrl(token);
 
-    res.redirect(authorizationUrl);
+    res.redirect('/getDeviceCode');
   });
 });
 
-// After consent is granted AAD redirects here.  The ADAL library is invoked via the
-// AuthenticationContext and retrieves an access token that can be used to access the
-// user owned resource.
-app.get('/getAToken', function(req, res) {
-  if (req.cookies.authstate !== req.query.state) {
-    res.send('error: state does not match');
-  }
-  var authenticationContext = new AuthenticationContext(authorityUrl);
-  authenticationContext.acquireTokenWithAuthorizationCode(req.query.code, redirectUri, resource, sampleParameters.clientId, sampleParameters.clientSecret, function(err, response) {
+app.get('/getDeviceCode', function (req, res) {
+  authenticationContext.acquireUserCode(resource, sampleParameters.clientId, 'es-mx', function (err, response) {
     var message = '';
     if (err) {
       message = 'error: ' + err.message + '\n';
-    }
-    message += 'response: ' + JSON.stringify(response);
-
-    if (err) {
+      message += 'response: ' + JSON.stringify(response);
       res.send(message);
-      return;
+    } else {
+      console.log(response);
+      res.cookie('userCodeInfo', response);
+      res.send(response.message + '\
+      <head>\
+        <title>test</title>\
+      </head>\
+      <body>\
+        <a href="./getAuthToken">toDo</a>\
+      </body>\
+          ');
     }
+  });
+});
 
-    // Later, if the access token is expired it can be refreshed.
-    authenticationContext.acquireTokenWithRefreshToken(response.refreshToken, sampleParameters.clientId, sampleParameters.clientSecret, resource, function(refreshErr, refreshResponse) {
-      if (refreshErr) {
-        message += 'refreshError: ' + refreshErr.message + '\n';
-      }
-      message += 'refreshResponse: ' + JSON.stringify(refreshResponse);
-
-      res.send(message); 
-    }); 
+app.get('/getAuthToken', function (req, res) {
+  console.log(req.cookies.userCodeInfo);
+  var message = '';
+  authenticationContext.acquireTokenWithDeviceCode(resource, sampleParameters.clientId, req.cookies.userCodeInfo, function (err, tokenResponse) {
+    if (err) {
+      console.log('error happens when acquiring token with device code');
+      message = 'error: ' + err.message + '\n';
+      message += 'response: ' + JSON.stringify(req.cookies.userCodeInfo);
+      res.send(message);
+    }
+    else {
+      console.log('refreshResponse: ' + JSON.stringify(tokenResponse));
+      res.clearCookie('userCodeInfo');
+      authenticationContext.acquireTokenWithClientCredentials(
+        'https://graph.microsoft.com',
+        sampleParameters.clientId,
+        sampleParameters.clientSecret,
+        function (err, tokenResponse) {
+          if (err) {
+            console.log('well that didn\'t work: ' + err.stack);
+          } else {
+            if (tokenResponse.accessToken && tokenResponse.accessToken.length > 0) {
+              message += 'accessToken: ' + tokenResponse.accessToken;
+              res.send(message);
+            }
+          }
+        });
+    }
   });
 });
 
