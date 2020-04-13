@@ -1,0 +1,29 @@
+{{#if userCode}}
+<h1>devicecode</h1>
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">userCode</th>
+      <th scope="col">deviceCode</th>
+      <th scope="col">verificationUrl</th>
+    </tr>
+  </thead>
+  <tbody>
+      <tr>
+        <td>{{userCode}}</td>
+        <td>{{deviceCode}}</td>
+        <td>{{verificationUrl}}</td>
+      </tr>
+  </tbody>
+</table>
+<script type="text/javascript">
+    $(function(){ 
+        location.href = '/devicecode/callback';
+    });
+</script>
+{{else}}
+<div>
+  <h1>token：</h1>
+  <p class="lead">{{token}}</p>
+</div>
+{{/if}}
