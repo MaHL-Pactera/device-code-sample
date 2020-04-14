@@ -51,7 +51,7 @@ router.get('/',
    }
 });
 
-router.get('/callback',
+router.get('/token',
   function(req, res, next) {
     let params = {
         active: { devicecode: true }
